@@ -1,0 +1,77 @@
+- job:
+    name: preserve-ceph-dev-pipeline
+    description: ceph-dev-pipeline
+    project-type: pipeline
+    concurrent: true
+    pipeline-scm:
+      scm:
+        - git:
+            url: https://github.com/ceph/ceph-build
+            branches:
+              - jenkinsfile
+            shallow-clone: true
+            submodule:
+                disable: true
+            wipe-workspace: false
+      script-path: ceph-dev-pipeline/build/Jenkinsfile
+      lightweight-checkout: true
+      do-not-fetch-tags: true
+
+    parameters:
+      - string:
+          name: BRANCH
+          description: "The git branch (or tag) to build"
+          default: sccache_main
+
+      - string:
+          name: DISTROS
+          description: "A list of distros to build for. Available options are: centos9, centos8, centos7, centos6, jammy, focal, bionic, xenial, trusty, precise, wheezy, jessie, and windows"
+          default: "centos9"
+
+      - string:
+          name: ARCHS
+          description: "A list of architectures to build for. Available options are: x86_64, and arm64"
+          default: "x86_64"
+
+      - bool:
+          name: THROWAWAY
+          description: "Default: False. When True it will not POST binaries to chacra. Artifacts will not be around for long. Useful to test builds."
+          default: true
+
+      - bool:
+          name: FORCE
+          description: "If this is unchecked, then then nothing is built or pushed if they already exist in chacra. This is the default. If this is checked, then the binaries will be built and pushed to chacra even if they already exist in chacra."
+          default: true
+
+      - choice:
+          name: FLAVOR
+          choices:
+            - default
+            - crimson
+            - jaeger
+          default: "default"
+          description: "Type of Ceph build, choices are: crimson, jaeger, default. Defaults to: 'default'"
+
+      - string:
+          name: CI_CONTAINER
+          description: 'Build container with development release of Ceph.  Note: this must be "false" or "true" so that it can execute a command or satisfy a string comparison'
+          default: "false"
+
+      - bool:
+          name: DWZ
+          description: "Use dwz to make debuginfo packages smaller"
+          default: false
+
+      - bool:
+          name: SCCACHE
+          description: "Use sccache"
+          default: true
+
+    wrappers:
+      - inject-passwords:
+          global: true
+          mask-password-params: true
+      - credentials-binding:
+          - text:
+              credential-id: shaman-api-key
+              variable: SHAMAN_API_KEY

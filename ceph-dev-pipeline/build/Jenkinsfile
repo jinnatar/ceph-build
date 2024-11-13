@@ -1,0 +1,46 @@
+pipeline {
+  agent any
+  stages {
+    stage("setup") {
+      steps {
+        script {
+          def setup_build = build(
+            job: "ceph-dev-new-setup",
+            parameters: [
+              string(name: "BRANCH", value: env.BRANCH),
+              string(name: "FLAVOR", value: env.FLAVOR),
+            ]
+          )
+          env.SETUP_BUILD_ID = setup_build.getNumber()
+          println "SETUP_BUILD_ID = ${env.SETUP_BUILD_ID}"
+        }
+      }
+    }
+    stage("build") {
+      steps {
+        script {
+          def SHA1 = sh(
+            script: "git rev-parse HEAD",
+            returnStdout: true,
+          )
+          println "SHA1 = ${SHA1}"
+          build(
+            job: "ceph-dev-new-build",
+            parameters: [
+              string(name: "SETUP_BUILD_ID", value: env.SETUP_BUILD_ID),
+              string(name: "BRANCH", value: env.BRANCH),
+              string(name: "DISTROS", value: env.DISTROS),
+              string(name: "ARCHS", value: env.ARCHS),
+              booleanParam(name: "THROWAWAY", value: env.THROWAWAY),
+              booleanParam(name: "FORCE", value: env.FORCE),
+              string(name: "FLAVOR", value: env.FLAVOR),
+              string(name: "CI_CONTAINER", value: env.CI_CONTAINER),
+              booleanParam(name: "DWZ", value: env.DWZ),
+              booleanParam(name: "SCCACHE", value: env.SCCACHE),
+            ]
+          )
+        }
+      }
+    }
+  }
+}
