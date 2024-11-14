@@ -1,46 +1,175 @@
-pipeline {
-  agent any
-  stages {
-    stage("setup") {
-      steps {
-        script {
-          def setup_build = build(
-            job: "ceph-dev-new-setup",
-            parameters: [
-              string(name: "BRANCH", value: env.BRANCH),
-              string(name: "FLAVOR", value: env.FLAVOR),
-            ]
-          )
-          env.SETUP_BUILD_ID = setup_build.getNumber()
-          println "SETUP_BUILD_ID = ${env.SETUP_BUILD_ID}"
+ceph_build_repo = "https://github.com/ceph/ceph-build"
+ceph_build_branch = "main"
+base_node_label = "gigantic&&"
+ubuntu_releases = [
+  "noble", // 24.04
+  "jammy", // 22.04
+  "focal", // 20.04
+]
+debian_releases = [
+  "bookworm", // v12 (2023)
+  "bullseye", // v11 (2021)
+]
+
+def getMatrixAxes(Map matrix_axes) {
+  List axes = []
+  matrix_axes.each { axis, values ->
+    List axisList = []
+    values.each { value ->
+        axisList << [(axis): value]
+    }
+    axes << axisList
+  }
+  axes.combinations().collect({it.sum()})
+}
+
+def getMatrixTasks(List axes) {
+  Map tasks = [failFast: false]
+  for(int i = 0; i < axes.size(); i++) {
+    Map axis = axes[i]
+    List axisEnv = axis.collect { k, v ->
+      "${k}=${v}"
+    }
+    String nodeLabel = base_node_label + axis.values().join("&&")
+    tasks[axisEnv.join(', ')] = { ->
+      node(nodeLabel) {
+        withEnv(axisEnv) {
+          withCredentials([
+            string(
+              credentialsId: 'chacractl-key',
+              variable: 'CHACRACTL_KEY',
+            ),
+            string(
+              credentialsId: 'shaman-api-key',
+              variable: 'SHAMAN_API_KEY',
+            ),
+            usernamePassword(
+              credentialsId: 'quay-ceph-io-ceph-ci',
+              usernameVariable: 'CONTAINER_REPO_USERNAME',
+              passwordVariable: 'CONTAINER_REPO_PASSWORD',
+            ),
+            usernamePassword(
+              credentialsId: 'dgalloway-docker-hub',
+              usernameVariable: 'DOCKER_HUB_USERNAME',
+              passwordVariable: 'DOCKER_HUB_PASSWORD',
+            ),
+            usernamePassword(
+              credentialsId: 'ibm-cloud-sccache-bucket',
+              usernameVariable: 'AWS_ACCESS_KEY_ID',
+              passwordVariable: 'AWS_SECRET_ACCESS_KEY',
+            ),
+          ]) {
+            stage("node") {
+              def node_shortname = env.NODE_NAME.split('\\+')[-1]
+              def node_url = new URI([env.JENKINS_URL, "computer", env.NODE_NAME].join("/")).normalize()
+              echo "DIST=${env.DIST} ARCH=${env.ARCH} FLAVOR=${env.FLAVOR}\n${node_shortname}\n${node_url}"
+              sh "cat /etc/os-release"
+            }
+            stage("checkout ceph-build") {
+              checkout scmGit(
+                branches: [[name: ceph_build_branch]],
+                userRemoteConfigs: [[url: ceph_build_repo]],
+                extensions: [
+                  [$class: 'CleanBeforeCheckout']
+                ],
+              )
+            }
+            stage("copy artifacts") {
+              copyArtifacts(
+                projectName: "ceph-dev-new-setup",
+                selector: specific(buildNumber: env.SETUP_BUILD_ID),
+                filter: "dist/**",
+              )
+              def sha1_props = readProperties file: "${WORKSPACE}/dist/sha1"
+              env.SHA1 = sha1_props.SHA1
+              println "SHA1=${env.SHA1}"
+              env.VERSION = readFile file: "${WORKSPACE}/dist/version"
+              def shaman_url = "https://shaman.ceph.com/builds/ceph/${env.BRANCH}/${env.SHA1}"
+              def build_description = """SHA1=${env.SHA1}<br />
+                VERSION=${env.VERSION}<br />
+                <a href="${shaman_url}">shaman builds for this branch+commit</a>
+              """
+              buildDescription build_description
+              sh "sha256sum dist/*"
+              sh "cat dist/sha1 dist/version"
+            }
+            stage("build") {
+              def props = readProperties file: "${WORKSPACE}/dist/other_envvars"
+              for (p in props) {
+                env."${p.key}" = p.value
+              }
+              if ( (debian_releases + ubuntu_releases).contains(env.DIST) ) {
+                sh """#!/bin/bash
+                  . ./ceph-dev-new-build/build/validate_deb
+                  . ./scripts/build_utils.sh
+                  . ./ceph-dev-new-build/build/setup_deb
+                  . ./ceph-dev-new-build/build/setup_pbuilder
+                  . ./ceph-dev-new-build/build/build_deb
+                """
+              } else if ( env.DIST =~ /^(centos|rhel|fedora).*/ ) {
+                sh """#!/bin/bash
+                  . ./ceph-dev-new-build/build/validate_rpm
+                  . ./scripts/build_utils.sh
+                  . ./scripts/setup_sccache.sh
+                  . ./ceph-dev-new-build/build/setup_rpm
+                  reset_sccache
+                  . ./ceph-dev-new-build/build/build_rpm
+                """
+              } else if ( env.DIST =~ /suse|sles/ ) {
+                sh """#!/bin/bash
+                  . ./ceph-dev-new-build/build/validate_osc
+                  . ./scripts/build_utils.sh
+                  . ./ceph-dev-new-build/build/setup_osc
+                  . ./ceph-dev-new-build/build/build_osc
+                """
+              } else if ( env.DIST =~ /windows/ ) {
+                sh """#!/bin/bash
+                  . ./ceph-dev-new-build/build/validate_mingw
+                  . ./scripts/build_utils.sh
+                  . ./ceph-dev-new-build/build/setup_mingw
+                  . ./ceph-dev-new-build/build/build_mingw
+                """
+              } else {
+                throw new Exception("DIST '${env.DIST}' is invalid!")
+              }
+              sh "command -v sccache && sccache --show-adv-stats || true"
+            }
+          }
         }
       }
     }
-    stage("build") {
-      steps {
-        script {
-          def SHA1 = sh(
-            script: "git rev-parse HEAD",
-            returnStdout: true,
-          )
-          println "SHA1 = ${SHA1}"
-          build(
-            job: "ceph-dev-new-build",
-            parameters: [
-              string(name: "SETUP_BUILD_ID", value: env.SETUP_BUILD_ID),
-              string(name: "BRANCH", value: env.BRANCH),
-              string(name: "DISTROS", value: env.DISTROS),
-              string(name: "ARCHS", value: env.ARCHS),
-              booleanParam(name: "THROWAWAY", value: env.THROWAWAY),
-              booleanParam(name: "FORCE", value: env.FORCE),
-              string(name: "FLAVOR", value: env.FLAVOR),
-              string(name: "CI_CONTAINER", value: env.CI_CONTAINER),
-              booleanParam(name: "DWZ", value: env.DWZ),
-              booleanParam(name: "SCCACHE", value: env.SCCACHE),
-            ]
-          )
-        }
-      }
+  }
+  tasks
+}
+
+node {
+  stage("source distribution") {
+    if ( ! env.SETUP_BUILD_ID ) {
+      def setup_build = build(
+        job: "ceph-dev-new-setup",
+        parameters: [
+          string(name: "BRANCH", value: env.BRANCH),
+          string(name: "FLAVOR", value: env.FLAVOR),
+          string(name: "SCCACHE", value: env.SCCACHE),
+          string(name: "DWZ", value: env.DWZ),
+        ]
+      )
+      env.SETUP_BUILD_ID = setup_build.getNumber()
     }
+    println "SETUP_BUILD_ID=${env.SETUP_BUILD_ID}"
+    def setup_build_url = new URI([env.JENKINS_URL, "ceph-dev-new-setup", env.SETUP_BUILD_ID].join("/")).normalize()
+    println "${setup_build_url}"
+  }
+  stage("parallel build") {
+    println "SETUP_BUILD_ID = ${env.SETUP_BUILD_ID}"
+    Map axes_in = [
+      DIST: env.DISTROS.split(" "),
+      ARCH: env.ARCHS.split(" "),
+    ]
+    def axes = getMatrixAxes(axes_in)
+    def axes_size = axes.size()
+    echo "${axes_size} axes: ${axes}"
+    def tasks = getMatrixTasks(axes)
+    parallel(tasks)
   }
 }

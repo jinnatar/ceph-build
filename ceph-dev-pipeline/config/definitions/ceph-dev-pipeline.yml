@@ -12,7 +12,7 @@
             shallow-clone: true
             submodule:
                 disable: true
-            wipe-workspace: false
+            wipe-workspace: true
       script-path: ceph-dev-pipeline/build/Jenkinsfile
       lightweight-checkout: true
       do-not-fetch-tags: true
@@ -66,6 +66,10 @@
           name: SCCACHE
           description: "Use sccache"
           default: true
+
+      - string:
+          name: SETUP_BUILD_ID
+          default: ""
 
     wrappers:
       - inject-passwords:
