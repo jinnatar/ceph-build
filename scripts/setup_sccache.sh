@@ -31,3 +31,8 @@ function install_sccache () {
   SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-$(uname -m)-unknown-linux-musl.tar.gz"
   curl -L $SCCACHE_URL | sudo tar --no-anchored --strip-components=1 -C /usr/local/bin/ -xzf - sccache
 }
+
+function reset_sccache () {
+  sccache --zero-stats
+  sccache --stop-server
+}
