@@ -52,10 +52,10 @@
           default: "default"
           description: "Type of Ceph build, choices are: crimson, jaeger, default. Defaults to: 'default'"
 
-      - string:
+      - bool:
           name: CI_CONTAINER
-          description: 'Build container with development release of Ceph.  Note: this must be "false" or "true" so that it can execute a command or satisfy a string comparison'
-          default: "false"
+          description: 'Build container with development release of Ceph'
+          default: false
 
       - bool:
           name: DWZ
