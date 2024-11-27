@@ -106,6 +106,3 @@ if [[ "$CI_CONTAINER" == true && $DISTRO == "centos" && "$RELEASE" =~ 8|9 ]] ; t
     cd $WORKSPACE
     sudo rm -rf ceph-container
 fi
-
-# update shaman with the completed build status
-update_build_status "completed" "ceph" $NORMAL_DISTRO $NORMAL_DISTRO_VERSION $NORMAL_ARCH
