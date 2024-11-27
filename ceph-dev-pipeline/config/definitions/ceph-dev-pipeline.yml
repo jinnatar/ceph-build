@@ -34,6 +34,11 @@
           default: "x86_64"
 
       - bool:
+          name: CI_BUILD
+          description: "Whether or not to compile and build packages"
+          default: true
+
+      - bool:
           name: THROWAWAY
           description: "Default: False. When True it will not POST binaries to chacra. Artifacts will not be around for long. Useful to test builds."
           default: true

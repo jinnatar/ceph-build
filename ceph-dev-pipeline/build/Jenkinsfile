@@ -45,6 +45,13 @@ pipeline {
           allOf {
             expression { env.DISTROS.contains(env.DIST) }
             expression { env.ARCHS.contains(env.ARCH) }
+            anyOf {
+              environment name: "CI_BUILD", value: "true"
+              allOf {
+                environment name: "CI_CONTAINER", value: "true"
+                environment name: "DIST", value: "centos9"
+              }
+            }
           }
         }
         axes {
@@ -138,6 +145,7 @@ pipeline {
                     . ./scripts/build_utils.sh
                     . ./scripts/setup_sccache.sh
                     . ./ceph-dev-new-build/build/setup_rpm
+                    [ "$CI_BUILD" = "true" ] || exit 0
                     reset_sccache
                     . ./ceph-dev-new-build/build/build_rpm
                   """
