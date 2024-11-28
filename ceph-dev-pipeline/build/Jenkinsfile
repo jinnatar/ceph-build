@@ -88,10 +88,17 @@ pipeline {
             }
             stage("copy artifacts") {
               steps {
+                script {
+                  if ( env.CI_BUILD == "true" ) {
+                    env.ARTIFACT_FILTER = "dist/**"
+                  } else {
+                    env.ARTIFACT_FILTER = "dist/sha1,dist/version,dist/other_envvars,dist/ceph-*/container/**"
+                  }
+                }
                 copyArtifacts(
                   projectName: "ceph-dev-new-setup",
                   selector: specific(buildNumber: env.SETUP_BUILD_ID),
-                  filter: "dist/**",
+                  filter: env.ARTIFACT_FILTER,
                 )
                 script {
                   def sha1_props = readProperties file: "${WORKSPACE}/dist/sha1"
