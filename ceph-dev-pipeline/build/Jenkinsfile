@@ -92,7 +92,7 @@ pipeline {
                   if ( env.CI_BUILD == "true" ) {
                     env.ARTIFACT_FILTER = "dist/**"
                   } else {
-                    env.ARTIFACT_FILTER = "dist/sha1,dist/version,dist/other_envvars,dist/ceph-*/container/**"
+                    env.ARTIFACT_FILTER = "dist/sha1,dist/version,dist/other_envvars,dist/ceph_*.orig.tar.gz"
                   }
                 }
                 copyArtifacts(
