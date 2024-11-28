@@ -113,15 +113,12 @@ pipeline {
             environment {
               CHACRACTL_KEY = credentials('chacractl-key')
               SHAMAN_API_KEY = credentials('shaman-api-key')
-              CONTAINER_REPO_CREDS = credentials('quay-ceph-io-ceph-ci')
               SCCACHE_BUCKET_CREDS = credentials('ibm-cloud-sccache-bucket')
             }
             steps {
               script {
                 env.AWS_ACCESS_KEY_ID = env.SCCACHE_BUCKET_CREDS_USR
                 env.AWS_SECRET_ACCESS_KEY = env.SCCACHE_BUCKET_CREDS_PSW
-                env.CONTAINER_REPO_USERNAME = env.CONTAINER_REPO_CREDS_USR
-                env.CONTAINER_REPO_PASSWORD = env.CONTAINER_REPO_CREDS_PSW
                 def props = readProperties file: "${WORKSPACE}/dist/other_envvars"
                 for (p in props) {
                   env."${p.key}" = p.value
