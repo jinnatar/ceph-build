@@ -117,9 +117,6 @@ pipeline {
               }
             }
           stage("build") {
-            when {
-              environment name: "CI_BUILD", value: "true"
-            }
             environment {
               CHACRACTL_KEY = credentials('chacractl-key')
               SHAMAN_API_KEY = credentials('shaman-api-key')
